@@ -93,7 +93,14 @@ for idx, polygon in enumerate(all_polygons[start_idx:], start=start_idx):
         progress["created_segments"].append({"id": seg_id, "polygon": polygon})
         with open("progress.json", "w", encoding="utf-8") as f:
             json.dump(progress, f, ensure_ascii=False, indent=2)
-        time.sleep(1)  # пауза для API
+
+            # Пауза для API
+            if (idx + 1) % 10 == 0:
+                print("[⏳] Достигли 10 сегментов, делаем минутную паузу...")
+                time.sleep(65)
+            else:
+                time.sleep(6)
+                
     else:
         print(f"[!] Ошибка при создании сегмента {idx+1}: {response.status_code} {data}")
         break
