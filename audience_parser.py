@@ -82,11 +82,33 @@ def collect_segment_data(driver, row_elem, segment_id):
         "affinities": affinities
     }
 
+def load_all_segments(driver):
+    """Кликает 'Показать ещё' пока не исчезнет кнопка"""
+    while True:
+        try:
+            show_more_btn = WebDriverWait(driver, 3).until(
+                EC.element_to_be_clickable(
+                    (By.CSS_SELECTOR, "button.audience-segments-table__show-more-button")
+                )
+            )
+            driver.execute_script("arguments[0].click();", show_more_btn)
+            print("[↓] Нажали 'Показать ещё', ждём подгрузку...")
+            time.sleep(2)
+        except TimeoutException:
+            print("[✓] Все сегменты подгружены, кнопка исчезла.")
+            break
+        except Exception as e:
+            print(f"[!] Ошибка при клике на 'Показать ещё': {e}")
+            break
+
+
 def main():
     driver = connect_to_browser()
     driver.get("https://audience.yandex.ru/")
     print("[*] Подключились к браузеру и открыли аудитории.")
     time.sleep(3)  # ждём загрузку страницы и закрытие всплывашек вручную
+
+    load_all_segments(driver) 
 
     headers, segments = get_segments_table(driver)
     print(f"[*] Заголовки: {headers}")

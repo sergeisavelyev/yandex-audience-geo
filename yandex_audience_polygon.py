@@ -5,6 +5,7 @@ import json
 import time
 import requests
 from shapely.geometry import shape, Polygon, box
+from datetime import datetime, timedelta
 
 load_dotenv()
 
@@ -70,7 +71,24 @@ start_idx = progress["last_created_index"] + 1
 # ------------------------------
 # Создаём сегменты через API
 # ------------------------------
+hour_counter = 0
+hour_start = datetime.now()
+
 for idx, polygon in enumerate(all_polygons[start_idx:], start=start_idx):
+    # Проверяем лимит по времени
+    now = datetime.now()
+    if (now - hour_start).total_seconds() >= 3600:
+        hour_start = now
+        hour_counter = 0
+
+    if hour_counter >= 100:
+        # Достигли лимита — ждём до конца часа
+        wait_sec = 3600 - (now - hour_start).total_seconds()
+        print(f"[⏳] Достигнут лимит 100/час. Ждём {int(wait_sec/60)} мин...")
+        time.sleep(wait_sec + 5)
+        hour_start = datetime.now()
+        hour_counter = 0
+
     payload = {
         "segment": {
             "name": f"Kazan Segment {idx+1}",
@@ -91,18 +109,26 @@ for idx, polygon in enumerate(all_polygons[start_idx:], start=start_idx):
         print(f"[+] Сегмент {idx+1} создан, ID: {seg_id}")
         progress["last_created_index"] = idx
         progress["created_segments"].append({"id": seg_id, "polygon": polygon})
+
         with open("progress.json", "w", encoding="utf-8") as f:
             json.dump(progress, f, ensure_ascii=False, indent=2)
 
-            # Пауза для API
-            if (idx + 1) % 10 == 0:
-                print("[⏳] Достигли 10 сегментов, делаем минутную паузу...")
-                time.sleep(65)
-            else:
-                time.sleep(6)
-                
+        hour_counter += 1
+
+        # небольшая пауза между запросами
+        time.sleep(6)
+
+        # раз в 10 запросов — чуть подольше
+        if (idx + 1) % 10 == 0:
+            print("[⏳] Сделали 10 сегментов, пауза 1 минута...")
+            time.sleep(60)
+
     else:
         print(f"[!] Ошибка при создании сегмента {idx+1}: {response.status_code} {data}")
-        break
+        if response.status_code == 429:
+            print("[⚠️] Превышен лимит. Ждём 5 минут...")
+            time.sleep(300)
+        else:
+            break
 
 print("[*] Скрипт завершён, прогресс сохранён в progress.json")
