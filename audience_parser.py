@@ -67,20 +67,36 @@ def collect_segment_data(driver, row_elem, segment_id):
     # --- Интересы и категории ---
     interests_tab_btn = driver.find_element(By.XPATH, "//span[text()='Интересы и категории']")
     driver.execute_script("arguments[0].click();", interests_tab_btn)
+    time.sleep(1.5)  # чтобы контент точно подгрузился
 
-    affinity_rows = WebDriverWait(driver, WAIT_SHORT).until(
-        EC.presence_of_all_elements_located((By.CSS_SELECTOR, ".audience-stats-widget-column-chart__affinity-row"))
-    )
-    affinities = [{"label": r.find_element(By.CLASS_NAME, "audience-stats-widget-column-chart__label").text,
-                   "affinity": r.find_element(By.CLASS_NAME, "audience-stats-widget-column-chart__percent").text}
-                  for r in affinity_rows]
+    # Находим все заголовки "Интересы"/"Категории"
+    sections = driver.find_elements(By.CSS_SELECTOR, ".audience-segment-statistics__label_centered_yes")
+
+    interests = []
+    categories = []
+
+    for section in sections:
+        title = section.text.strip().lower()
+        parent = section.find_element(By.XPATH, "./following-sibling::*[1]")
+        rows = parent.find_elements(By.CSS_SELECTOR, ".audience-stats-widget-column-chart__affinity-row")
+
+        data = [{"label": r.find_element(By.CLASS_NAME, "audience-stats-widget-column-chart__label").text,
+                 "affinity": r.find_element(By.CLASS_NAME, "audience-stats-widget-column-chart__percent").text}
+                for r in rows]
+
+        if "интерес" in title:
+            interests.extend(data)
+        elif "категор" in title:
+            categories.extend(data)
 
     return {
         "segment_id": segment_id,
         "cities": cities,
         "devices": devices,
-        "affinities": affinities
+        "interests": interests,
+        "categories": categories
     }
+
 
 def load_all_segments(driver):
     """Кликает 'Показать ещё' пока не исчезнет кнопка"""
@@ -101,6 +117,59 @@ def load_all_segments(driver):
             print(f"[!] Ошибка при клике на 'Показать ещё': {e}")
             break
 
+# --- Вариант с плоскими таблицами ---
+def save_flat_data(all_data):
+    # Города
+    with open("segments_cities.csv", "w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=["segment_id", "city", "percent"])
+        writer.writeheader()
+        for item in all_data:
+            for c in item["cities"]:
+                writer.writerow({
+                    "segment_id": item["segment_id"],
+                    "city": c["city"],
+                    "percent": c["percent"]
+                })
+
+    # Устройства
+    with open("segments_devices.csv", "w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=["segment_id", "device", "percent"])
+        writer.writeheader()
+        for item in all_data:
+            for d in item["devices"]:
+                writer.writerow({
+                    "segment_id": item["segment_id"],
+                    "device": d["device"],
+                    "percent": d["percent"]
+                })
+
+    # Интересы
+    with open("segments_interests.csv", "w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=["segment_id", "label", "affinity"])
+        writer.writeheader()
+        for item in all_data:
+            for a in item.get("interests", []):
+                writer.writerow({
+                    "segment_id": item["segment_id"],
+                    "label": a["label"],
+                    "affinity": a["affinity"]
+                })
+
+    # Категории
+    with open("segments_categories.csv", "w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=["segment_id", "label", "affinity"])
+        writer.writeheader()
+        for item in all_data:
+            for a in item.get("categories", []):
+                writer.writerow({
+                    "segment_id": item["segment_id"],
+                    "label": a["label"],
+                    "affinity": a["affinity"]
+                })
+
+print("[✅] Все данные сохранены: segments_cities.csv, segments_devices.csv, segments_interests.csv, segments_categories.csv")
+
+
 
 def main():
     driver = connect_to_browser()
@@ -108,7 +177,7 @@ def main():
     print("[*] Подключились к браузеру и открыли аудитории.")
     time.sleep(3)  # ждём загрузку страницы и закрытие всплывашек вручную
 
-    load_all_segments(driver) 
+    # load_all_segments(driver) 
 
     headers, segments = get_segments_table(driver)
     print(f"[*] Заголовки: {headers}")
@@ -126,18 +195,24 @@ def main():
                 print(f"[!] Ошибка сегмента {segment_id}: {e}")
 
     # Сохраняем в CSV
-    with open("segments_data.csv", "w", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=["segment_id", "cities", "devices", "affinities"])
-        writer.writeheader()
-        for item in all_data:
-            writer.writerow({
-                "segment_id": item["segment_id"],
-                "cities": json.dumps(item["cities"], ensure_ascii=False),
-                "devices": json.dumps(item["devices"], ensure_ascii=False),
-                "affinities": json.dumps(item["affinities"], ensure_ascii=False)
-            })
+    # with open("segments_data.csv", "w", newline="", encoding="utf-8") as f:
+    #     writer = csv.DictWriter(f, fieldnames=["segment_id", "cities", "devices", "affinities"])
+    #     writer.writeheader()
+    #     for item in all_data:
+    #         writer.writerow({
+    #             "segment_id": item["segment_id"],
+    #             "cities": json.dumps(item["cities"], ensure_ascii=False),
+    #             "devices": json.dumps(item["devices"], ensure_ascii=False),
+    #             "affinities": json.dumps(item["affinities"], ensure_ascii=False)
+    #         })
 
-    print("[*] Данные всех сегментов сохранены в segments_data.csv")
+ 
+
+    # Сохраняем в CSV
+    save_flat_data(all_data)
+    # print("[*] Браузер остаётся открытым для дальнейшего анализа.")
+
+    # print("[*] Данные всех сегментов сохранены в segments_data.csv")
     print("[*] Браузер остаётся открытым для дальнейшего анализа.")
 
 if __name__ == "__main__":
