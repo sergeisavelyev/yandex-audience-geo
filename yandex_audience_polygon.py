@@ -6,6 +6,7 @@ import time
 import requests
 from shapely.geometry import shape, Polygon, box
 from datetime import datetime, timedelta
+import h3
 
 load_dotenv()
 
@@ -21,41 +22,65 @@ headers = {
 }
 url_create = "https://api-audience.yandex.ru/v1/management/segments/create_geo_polygon"
 
+
+
+# Было для прямоугольных полигонов
 # ------------------------------
 # Загружаем границы города
 # ------------------------------
-geojson_file = "kazan_map.geojson"
-with open(geojson_file, "r", encoding="utf-8") as f:
-    gj = json.load(f)
+# geojson_file = "kazan_map.geojson"
+# with open(geojson_file, "r", encoding="utf-8") as f:
+#     gj = json.load(f)
 
-city_polygon = shape(gj['features'][0]['geometry'])
-print("[+] Границы города загружены")
+# city_polygon = shape(gj['features'][0]['geometry'])
+# print("[+] Границы города загружены")
 
 # ------------------------------
 # Генерируем сетку 500x500 м (~0.0045 градуса)
 # ------------------------------
-delta = 0.0045  # ~500 м
-minx, miny, maxx, maxy = city_polygon.bounds
+# delta = 0.0045  # ~500 м
+# minx, miny, maxx, maxy = city_polygon.bounds
+
+# all_polygons = []
+# lat = miny
+# while lat < maxy:
+#     lon = minx
+#     while lon < maxx:
+#         square = box(lon, lat, lon + delta, lat + delta)
+#         if city_polygon.intersects(square):
+#             coords = [
+#                 {"latitude": lat, "longitude": lon},
+#                 {"latitude": lat + delta, "longitude": lon},
+#                 {"latitude": lat + delta, "longitude": lon + delta},
+#                 {"latitude": lat, "longitude": lon + delta},
+#                 {"latitude": lat, "longitude": lon}
+#             ]
+#             all_polygons.append({"points": coords})
+#         lon += delta
+#     lat += delta
+
+# print(f"[+] Сетка готова: {len(all_polygons)} квадратов внутри города")
+
+
+# Вариант с гексагонами
+with open("hex_ids.json", "r", encoding="utf-8") as f:
+    hex_ids_filtered = json.load(f)
 
 all_polygons = []
-lat = miny
-while lat < maxy:
-    lon = minx
-    while lon < maxx:
-        square = box(lon, lat, lon + delta, lat + delta)
-        if city_polygon.intersects(square):
-            coords = [
-                {"latitude": lat, "longitude": lon},
-                {"latitude": lat + delta, "longitude": lon},
-                {"latitude": lat + delta, "longitude": lon + delta},
-                {"latitude": lat, "longitude": lon + delta},
-                {"latitude": lat, "longitude": lon}
-            ]
-            all_polygons.append({"points": coords})
-        lon += delta
-    lat += delta
 
-print(f"[+] Сетка готова: {len(all_polygons)} квадратов внутри города")
+for hex_id in hex_ids_filtered:
+    boundary = h3.cell_to_boundary(hex_id)  # [(lat, lon), ...]
+    polygon = {
+        "points": [{"latitude": lat, "longitude": lon} for lat, lon in boundary]
+    }
+
+    # Замыкаем полигон для API
+    if polygon["points"][0] != polygon["points"][-1]:
+        polygon["points"].append(polygon["points"][0])
+
+    all_polygons.append(polygon)
+
+print(f"[+] Гексагонов для API: {len(all_polygons)}")
 
 # ------------------------------
 # Загружаем прогресс
