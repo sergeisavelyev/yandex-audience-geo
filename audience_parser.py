@@ -25,7 +25,7 @@ def launch_chrome_with_debug():
     ])
     
     # Ждем пока Chrome запустится
-    time.sleep(2)
+    time.sleep(2)   
     print(f"✅ Chrome запущен на порту {REMOTE_DEBUGGING_PORT}")
 
 def clean_percent(text):
@@ -279,7 +279,7 @@ def main():
     print("[*] Подключились к браузеру и открыли аудитории.")
     time.sleep(3)  # ждём загрузку страницы и закрытие всплывашек вручную
 
-    # load_all_segments(driver) 
+    load_all_segments(driver) 
 
     headers, segments = get_segments_table(driver)
     print(f"[*] Заголовки: {headers}")

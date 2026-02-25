@@ -71,7 +71,7 @@ def extract_polygon(segment):
 
 
 def save_to_csv(segments):
-    with open("segments_polygons_bi.csv", "w", newline="", encoding="utf-8") as f:
+    with open("tables/source_table/segments_polygons_bi.csv", "w", newline="", encoding="utf-8") as f:
         writer = csv.writer(f)
         writer.writerow(["segment_id", "name", "form", "cookies", "polygon_json"])
 
@@ -86,7 +86,7 @@ def save_to_csv(segments):
                     json.dumps(polygon, ensure_ascii=False)
                 ])
 
-    print("[✅] Сохранено в segments_polygons_bi.csv")
+    print("[✅] Сохранено в tables/source_table/segments_polygons_bi.csv")
 
 
 def main():
