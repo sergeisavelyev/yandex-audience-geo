@@ -5,6 +5,7 @@ df_cat = pd.read_csv('tables/source_table/segments_categories.csv')
 df_int = pd.read_csv('tables/source_table/segments_interests.csv')
 df_cities = pd.read_csv('tables/source_table/segments_cities.csv')
 df_devices = pd.read_csv('tables/source_table/segments_devices.csv')
+df_missing = pd.read_csv('tables/source_table/segments_missing.csv')
 df_base = pd.read_csv('tables/source_table/segments_polygons_bi.csv')
 
 # Функция для преобразования процентов в числа
@@ -29,6 +30,7 @@ df_devices['type'] = 'device'
 df_cat = df_cat.merge(df_base, on='segment_id', how='left').to_csv('tables/prepared/segments_categories.csv', index=False, encoding='utf-8')
 df_int = df_int.merge(df_base, on='segment_id', how='left').to_csv('tables/prepared/segments_interests.csv', index=False, encoding='utf-8')
 df_cities = df_cities.merge(df_base, on='segment_id', how='left').to_csv('tables/prepared/segments_cities.csv', index=False, encoding='utf-8')
+df_missing = df_missing.merge(df_base, on='segment_id', how='left').to_csv('tables/prepared/segments_missing.csv', index=False, encoding='utf-8')
 df_devices = df_devices.merge(df_base, on='segment_id', how='left').to_csv('tables/prepared/segments_devices.csv', index=False, encoding='utf-8')
 
 
