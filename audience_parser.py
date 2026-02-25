@@ -1,6 +1,7 @@
 import time
 import csv
 import json
+import subprocess
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.options import Options
@@ -9,7 +10,27 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException
 
 REMOTE_DEBUGGING_PORT = 9222  # порт, на котором открыт Chrome с --remote-debugging-port
-WAIT_SHORT = 3  # короткий таймаут для быстрого ожидания
+WAIT_SHORT = 0.3  # короткий таймаут для быстрого ожидания
+
+def launch_chrome_with_debug():
+    """Запускает Chrome с удаленной отладкой"""
+    
+    chrome_path = r"C:\Program Files\Google\Chrome\Application\chrome.exe"
+    
+    # Запускаем Chrome с параметрами
+    subprocess.Popen([
+        chrome_path,
+        f"--remote-debugging-port={REMOTE_DEBUGGING_PORT}",
+        "--user-data-dir=C:/temp/chrome_debug_profile"  # отдельный профиль
+    ])
+    
+    # Ждем пока Chrome запустится
+    time.sleep(2)
+    print(f"✅ Chrome запущен на порту {REMOTE_DEBUGGING_PORT}")
+
+def clean_percent(text):
+    """Очищает процент от лишних символов, оставляет только число"""
+    return text.replace("%", "").replace("\u2009", "").strip()
 
 def connect_to_browser():
     options = Options()
@@ -18,7 +39,7 @@ def connect_to_browser():
     return driver
 
 def get_segments_table(driver):
-    time.sleep(2)
+    time.sleep(1)
     try:
         table = driver.find_element(By.CSS_SELECTOR, "table.audience-segments-table__table")
     except Exception as e:
@@ -41,6 +62,52 @@ def collect_segment_data(driver, row_elem, segment_id):
         row_elem.find_elements(By.CSS_SELECTOR, "td")[-1].find_element(By.CSS_SELECTOR, "span")
     )
     print(f"[*] Детализация сегмента {segment_id} открыта.")
+
+    # --- Вкладка ОСНОВНОЕ ---
+    main_tab_btn = WebDriverWait(driver, WAIT_SHORT).until(
+        EC.element_to_be_clickable((By.XPATH, "//span[text()='Основное']"))
+    )
+    driver.execute_script("arguments[0].click();", main_tab_btn)
+
+   # Ждем появления блока охвата
+    reach_elem = WebDriverWait(driver, WAIT_SHORT).until(
+        EC.presence_of_element_located((By.CSS_SELECTOR, ".audience-stats-widget-amount__percent"))
+    )
+    reach = reach_elem.text.strip()
+
+    # --- Пол ---
+    men = women = ""
+    try:
+        gender_cols = WebDriverWait(driver, WAIT_SHORT).until(
+            EC.presence_of_all_elements_located((By.CSS_SELECTOR, ".audience-stats-widget-gender__column"))
+        )
+        for col in gender_cols:
+            label = col.find_element(By.CLASS_NAME, "audience-stats-widget-gender__label").text.lower()
+            percent = col.find_element(By.CLASS_NAME, "audience-stats-widget-gender__value").text
+            percent = clean_percent(percent)
+            if "муж" in label:
+                men = percent
+            elif "жен" in label:
+                women = percent
+    except Exception as e:
+        print(f"[!] Ошибка при парсинге пола: {e}")
+
+    # --- Возраст ---
+    age_data = {"<18":"", "18-25":"", "25-35":"", "35-45":"", "45-55":"", ">55":""}
+    try:
+        age_tspans = WebDriverWait(driver, WAIT_SHORT).until(
+            EC.presence_of_all_elements_located(
+                (By.CSS_SELECTOR, ".audience-stats-widget-age .highcharts-data-labels tspan")
+            )
+        )
+        labels = list(age_data.keys())
+        for i, tspan in enumerate(age_tspans):
+            if i >= len(labels):
+                break
+            age_data[labels[i]] = clean_percent(tspan.text)
+    except Exception as e:
+        print(f"[!] Ошибка при парсинге возраста: {e}")
+
 
     # --- Города и устройства ---
     cities_tab_btn = driver.find_element(By.XPATH, "//span[text()='Города и устройства']")
@@ -91,6 +158,10 @@ def collect_segment_data(driver, row_elem, segment_id):
 
     return {
         "segment_id": segment_id,
+        "reach": reach,
+        "men": men,
+        "women": women,
+        **age_data,
         "cities": cities,
         "devices": devices,
         "interests": interests,
@@ -102,14 +173,14 @@ def load_all_segments(driver):
     """Кликает 'Показать ещё' пока не исчезнет кнопка"""
     while True:
         try:
-            show_more_btn = WebDriverWait(driver, 3).until(
+            show_more_btn = WebDriverWait(driver, 1).until(
                 EC.element_to_be_clickable(
                     (By.CSS_SELECTOR, "button.audience-segments-table__show-more-button")
                 )
             )
             driver.execute_script("arguments[0].click();", show_more_btn)
             print("[↓] Нажали 'Показать ещё', ждём подгрузку...")
-            time.sleep(2)
+            time.sleep(0.5)
         except TimeoutException:
             print("[✓] Все сегменты подгружены, кнопка исчезла.")
             break
@@ -120,7 +191,7 @@ def load_all_segments(driver):
 # --- Вариант с плоскими таблицами ---
 def save_flat_data(all_data):
     # Города
-    with open("segments_cities.csv", "w", newline="", encoding="utf-8") as f:
+    with open("tables/source_table/segments_cities.csv", "w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=["segment_id", "city", "percent"])
         writer.writeheader()
         for item in all_data:
@@ -132,7 +203,7 @@ def save_flat_data(all_data):
                 })
 
     # Устройства
-    with open("segments_devices.csv", "w", newline="", encoding="utf-8") as f:
+    with open("tables/source_table/segments_devices.csv", "w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=["segment_id", "device", "percent"])
         writer.writeheader()
         for item in all_data:
@@ -144,7 +215,7 @@ def save_flat_data(all_data):
                 })
 
     # Интересы
-    with open("segments_interests.csv", "w", newline="", encoding="utf-8") as f:
+    with open("tables/source_table/segments_interests.csv", "w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=["segment_id", "label", "affinity"])
         writer.writeheader()
         for item in all_data:
@@ -156,7 +227,7 @@ def save_flat_data(all_data):
                 })
 
     # Категории
-    with open("segments_categories.csv", "w", newline="", encoding="utf-8") as f:
+    with open("tables/source_table/segments_categories.csv", "w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=["segment_id", "label", "affinity"])
         writer.writeheader()
         for item in all_data:
@@ -167,11 +238,42 @@ def save_flat_data(all_data):
                     "affinity": a["affinity"]
                 })
 
-print("[✅] Все данные сохранены: segments_cities.csv, segments_devices.csv, segments_interests.csv, segments_categories.csv")
+    # Демография (Основное)
+    with open("tables/source_table/segments_demography.csv", "w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=[
+            "segment_id",
+            "reach",
+            "men",
+            "women",
+            "<18",
+            "18-25",
+            "25-35",
+            "35-45",
+            "45-55",
+            ">55"
+        ])
+        writer.writeheader()
+
+        for item in all_data:
+            writer.writerow({
+                "segment_id": item["segment_id"],
+                "reach": item.get("reach"),
+                "men": item.get("men"),
+                "women": item.get("women"),
+                "<18": item.get("<18"),
+                "18-25": item.get("18-25"),
+                "25-35": item.get("25-35"),
+                "35-45": item.get("35-45"),
+                "45-55": item.get("45-55"),
+                ">55": item.get(">55")
+            })       
+
+    print("[✅] Все данные сохранены: segments_demography.csv, segments_cities.csv, segments_devices.csv, segments_interests.csv, segments_categories.csv")
 
 
 
 def main():
+    launch_chrome_with_debug()
     driver = connect_to_browser()
     driver.get("https://audience.yandex.ru/")
     print("[*] Подключились к браузеру и открыли аудитории.")
@@ -193,27 +295,12 @@ def main():
                 print(f"[!] Не удалось собрать данные сегмента {segment_id}")
             except Exception as e:
                 print(f"[!] Ошибка сегмента {segment_id}: {e}")
-
-    # Сохраняем в CSV
-    # with open("segments_data.csv", "w", newline="", encoding="utf-8") as f:
-    #     writer = csv.DictWriter(f, fieldnames=["segment_id", "cities", "devices", "affinities"])
-    #     writer.writeheader()
-    #     for item in all_data:
-    #         writer.writerow({
-    #             "segment_id": item["segment_id"],
-    #             "cities": json.dumps(item["cities"], ensure_ascii=False),
-    #             "devices": json.dumps(item["devices"], ensure_ascii=False),
-    #             "affinities": json.dumps(item["affinities"], ensure_ascii=False)
-    #         })
-
  
 
     # Сохраняем в CSV
     save_flat_data(all_data)
-    # print("[*] Браузер остаётся открытым для дальнейшего анализа.")
 
-    # print("[*] Данные всех сегментов сохранены в segments_data.csv")
-    print("[*] Браузер остаётся открытым для дальнейшего анализа.")
+    print("Конец")
 
 if __name__ == "__main__":
     main()

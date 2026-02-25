@@ -110,7 +110,7 @@ for idx, polygon in enumerate(all_polygons[start_idx:], start=start_idx):
         # Достигли лимита — ждём до конца часа
         wait_sec = 3600 - (now - hour_start).total_seconds()
         print(f"[⏳] Достигнут лимит 100/час. Ждём {int(wait_sec/60)} мин...")
-        time.sleep(wait_sec + 5)
+        time.sleep(wait_sec + 15)
         hour_start = datetime.now()
         hour_counter = 0
 
@@ -133,7 +133,7 @@ for idx, polygon in enumerate(all_polygons[start_idx:], start=start_idx):
         seg_id = data['segment']['id']
         print(f"[+] Сегмент {idx+1} создан, ID: {seg_id}")
         progress["last_created_index"] = idx
-        progress["created_segments"].append({"id": seg_id, "polygon": polygon})
+        progress["created_segments"].append({"id": seg_id, "name": f"Kazan Segment {idx+1}", "polygon": polygon})
 
         with open("progress.json", "w", encoding="utf-8") as f:
             json.dump(progress, f, ensure_ascii=False, indent=2)
